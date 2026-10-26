@@ -90,15 +90,28 @@ def match_mol2(template, atoms, bonds):
     return list(match)
 
 
-def embed(template, seed):
-    m = Chem.Mol(template)
-    if AllChem.EmbedMolecule(m, randomSeed=seed) != 0:
-        raise ValueError("RDKit 3D 구조 생성에 실패했습니다")
-    if AllChem.MMFFHasAllMoleculeParams(m):
-        AllChem.MMFFOptimizeMolecule(m)
-    else:
-        AllChem.UFFOptimizeMolecule(m)
-    return [tuple(m.GetConformer().GetAtomPosition(i)) for i in range(m.GetNumAtoms())]
+def embed(template, seed, gap=4.0):
+    """조각(이온)마다 따로 3D 구조를 만들고 x 축으로 gap Å 씩 떨어뜨려 놓는다."""
+    xyz = [None] * template.GetNumAtoms()
+    x_end = None
+    frag_ids = Chem.GetMolFrags(template)
+    for frag, idx in zip(Chem.GetMolFrags(template, asMols=True), frag_ids):
+        m = Chem.Mol(frag)
+        if m.GetNumAtoms() == 1:
+            pts = [(0.0, 0.0, 0.0)]
+        else:
+            if AllChem.EmbedMolecule(m, randomSeed=seed) != 0:
+                raise ValueError("RDKit 3D 구조 생성에 실패했습니다")
+            if AllChem.MMFFHasAllMoleculeParams(m):
+                AllChem.MMFFOptimizeMolecule(m)
+            else:
+                AllChem.UFFOptimizeMolecule(m)
+            pts = [tuple(m.GetConformer().GetAtomPosition(i)) for i in range(m.GetNumAtoms())]
+        shift = 0.0 if x_end is None else x_end + gap - min(p[0] for p in pts)
+        for i, p in zip(idx, pts):
+            xyz[i] = (p[0] + shift, p[1], p[2])
+        x_end = max(p[0] + shift for p in pts)
+    return xyz
 
 
 def write_lt(path, name, smiles, rows, bonds, charge_note):
