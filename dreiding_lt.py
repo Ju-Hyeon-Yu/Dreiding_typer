@@ -3,8 +3,6 @@
 """사용 예
   python3 dreiding_lt.py --smiles "Cn1cc[n+](C)c1.[O-]S(=O)(=O)C(F)(F)F" --mol2 ip.mol2 -o ip.lt
   python3 dreiding_lt.py --smiles "CCO" -o ethanol.lt          # 좌표는 RDKit, 전하 0
-  python3 dreiding_lt.py --smiles "..." --mol2 ip.mol2 -o ip.lt --lammps run_ip --vacuum
-                                       # moltemplate.sh 까지 실행해 LAMMPS 입력 생성
 
 mol2 를 주면 원자 순서·좌표·전하는 mol2 그대로 쓰고, 결합 차수와 화학 정보는
 SMILES 에서 가져온다(두 분자를 원소+연결 그래프로 대응).
@@ -12,8 +10,6 @@ SMILES 에서 가져온다(두 분자를 원소+연결 그래프로 대응).
 import argparse
 import os
 import re
-import shutil
-import subprocess
 import sys
 
 from rdkit import Chem
@@ -135,63 +131,6 @@ def write_lt(path, name, smiles, rows, bonds, charge_note):
         f.write("  }\n\n}\n")
 
 
-def _run(cmd, cwd, log):
-    r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
-    with open(os.path.join(cwd, log), "w") as f:
-        f.write(r.stdout + r.stderr)
-    if r.returncode != 0:
-        sys.exit(f"{cmd[0]} 실패 (로그: {os.path.join(cwd, log)})\n{r.stderr[-1500:]}")
-
-
-def build_lammps(lt_path, name, rows, outdir, pad=10.0, vacuum=False, cutoff=None, cleanup=True):
-    """system.lt 를 쓰고 moltemplate.sh(+cleanup_moltemplate.sh)로 LAMMPS 입력을 만든다."""
-    if shutil.which("moltemplate.sh") is None:
-        sys.exit("moltemplate.sh 를 찾지 못했습니다 (pip install moltemplate)")
-    os.makedirs(outdir, exist_ok=True)
-    lt_name = os.path.basename(lt_path)
-    dst = os.path.join(outdir, lt_name)
-    if os.path.abspath(dst) != os.path.abspath(lt_path):
-        shutil.copy(lt_path, dst)
-
-    xyz = [r["xyz"] for r in rows]
-    box = [(min(p[k] for p in xyz) - pad, max(p[k] for p in xyz) + pad) for k in range(3)]
-    with open(os.path.join(outdir, "system.lt"), "w") as f:
-        f.write(f'import "{lt_name}"\n\nmol = new {name}\n\nwrite_once("Data Boundary") {{\n')
-        for (lo, hi), ax in zip(box, "xyz"):
-            f.write(f"  {lo:.4f} {hi:.4f} {ax}lo {ax}hi\n")
-        f.write("}\n")
-
-    _run(["moltemplate.sh", "system.lt"], outdir, "moltemplate.log")
-    if cleanup:
-        # dreiding.lt 의 쓰지 않는 타입(원자 107, 이면각 17576 종)을 걷어냄
-        _run(["cleanup_moltemplate.sh"], outdir, "cleanup.log")
-    return _fix_lammps_inputs(outdir, vacuum, cutoff)
-
-
-def _fix_lammps_inputs(outdir, vacuum, cutoff):
-    """수소결합 쌍 유무와 진공 여부에 맞게 pair_style/kspace/boundary 를 고친다."""
-    init_p = os.path.join(outdir, "system.in.init")
-    set_p = os.path.join(outdir, "system.in.settings")
-    init, settings = open(init_p).read(), open(set_p).read()
-    has_hb = "hbond/dreiding/lj" in settings
-    m = re.search(r"^pair_style\s+hybrid/overlay\s+hbond/dreiding/lj\s+(\S+\s+\S+\s+\S+\s+\S+)"
-                  r"\s+lj/cut/coul/long\s+(\S+)\s*$", init, re.M)
-    if not m:
-        sys.exit(f"{init_p} 의 pair_style 형식이 예상과 다릅니다 (dreiding.lt 버전 확인 필요)")
-    sub = "lj/cut/coul/cut" if vacuum else "lj/cut/coul/long"
-    cut = cutoff if cutoff is not None else (100.0 if vacuum else float(m.group(2)))
-    hb = f"hbond/dreiding/lj {m.group(1)} " if has_hb else ""
-    init = init[:m.start()] + f"pair_style      hybrid/overlay {hb}{sub} {cut:g}" + init[m.end():]
-    if vacuum:
-        init = "boundary        s s s\n" + re.sub(r"^kspace_style.*\n?", "", init, flags=re.M)
-        settings = settings.replace("lj/cut/coul/long", "lj/cut/coul/cut")
-    with open(init_p, "w") as f:
-        f.write(init)
-    with open(set_p, "w") as f:
-        f.write(settings)
-    return has_hb
-
-
 def main(argv=None):
     ap = argparse.ArgumentParser(description="SMILES(+RESP mol2) → moltemplate DREIDING .lt")
     ap.add_argument("--smiles", required=True, help="이온쌍은 '.' 으로 연결 (예: A.B)")
@@ -200,16 +139,7 @@ def main(argv=None):
     ap.add_argument("--name", help="moltemplate 분자 이름 (기본: 출력 파일 이름)")
     ap.add_argument("--dreiding-lt", default=None, help=f"라벨 목록을 읽을 dreiding.lt (기본: {default_lt_path()})")
     ap.add_argument("--seed", type=int, default=1, help="mol2 없을 때 3D 구조 난수 시드")
-    g = ap.add_argument_group("moltemplate.sh 연결")
-    g.add_argument("--lammps", metavar="DIR", help="이 폴더에 system.lt 를 쓰고 moltemplate.sh 실행")
-    g.add_argument("--vacuum", action="store_true",
-                   help="진공 직접합: lj/cut/coul/cut, kspace 없음, boundary s s s")
-    g.add_argument("--cutoff", type=float, help="LJ/쿨롱 cutoff Å (기본: 주기 10, 진공 100)")
-    g.add_argument("--pad", type=float, default=10.0, help="상자 여백 Å (기본 10)")
-    g.add_argument("--no-cleanup", action="store_true", help="cleanup_moltemplate.sh 생략")
     args = ap.parse_args(argv)
-    if (args.vacuum or args.cutoff or args.no_cleanup) and not args.lammps:
-        ap.error("--vacuum/--cutoff/--no-cleanup 은 --lammps 와 함께 써야 합니다")
 
     name = args.name or re.sub(r"\W", "_", os.path.splitext(os.path.basename(args.out))[0])
     mol0 = Chem.MolFromSmiles(args.smiles)
@@ -262,13 +192,6 @@ def main(argv=None):
         print(f"  {k:4d} {r['name']:<6} {r['label']:<{width}} {r['q']:>10.6f}")
     for w in dict.fromkeys(warnings):
         print(f"경고: {w}", file=sys.stderr)
-
-    if args.lammps:
-        has_hb = build_lammps(args.out, name, rows, args.lammps, args.pad, args.vacuum,
-                              args.cutoff, not args.no_cleanup)
-        mode = "진공 직접합" if args.vacuum else "주기 경계 + Ewald"
-        print(f"{args.lammps}: system.data, system.in.init, system.in.settings 생성 "
-              f"({mode}, 수소결합 항 {'있음' if has_hb else '없음 — 주개 없음'})")
 
 
 if __name__ == "__main__":
