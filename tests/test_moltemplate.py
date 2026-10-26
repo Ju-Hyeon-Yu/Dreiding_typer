@@ -8,7 +8,7 @@ import sys
 
 import pytest
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import rdGeometry  # noqa: F401
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -37,18 +37,17 @@ SMILES = {
 def write_shuffled_mol2(smiles, path, seed=7):
     """원자 순서를 섞고 SYBYL 형식 이름/타입을 쓴 mol2 (전하는 원자 번호로 구분 가능한 값)."""
     m = Chem.AddHs(Chem.MolFromSmiles(smiles))
-    AllChem.EmbedMolecule(m, randomSeed=1)
+    xyz = dreiding_lt.embed(m, seed=1)
     order = list(range(m.GetNumAtoms()))
     random.Random(seed).shuffle(order)
     pos = {old: new for new, old in enumerate(order)}
-    conf = m.GetConformer()
     charges = {}
     with open(path, "w") as f:
         f.write(f"@<TRIPOS>MOLECULE\nt\n{m.GetNumAtoms()} {m.GetNumBonds()} 1 0 0\nSMALL\nUSER_CHARGES\n\n")
         f.write("@<TRIPOS>ATOM\n")
         for new, old in enumerate(order):
             a = m.GetAtomWithIdx(old)
-            p = conf.GetAtomPosition(old)
+            p = Chem.rdGeometry.Point3D(*xyz[old])
             q = round(0.001 * (old + 1), 6)
             charges[new] = (a.GetSymbol(), q)
             sy = a.GetSymbol() + (".ar" if a.GetIsAromatic() else "")
@@ -87,9 +86,10 @@ def built(tmp_path_factory):
     with open(d / "system.lt", "w") as f:
         for name in SMILES:
             f.write(f'import "{name}.lt"\n')
-        for name in SMILES:
-            f.write(f"m_{name} = new {name}\n")
-        f.write('write_once("Data Boundary") {\n -50 50 xlo xhi\n -50 50 ylo yhi\n -50 50 zlo zhi\n}\n')
+        for k, name in enumerate(SMILES):
+            f.write(f"m_{name} = new {name}.move({30 * k},0,0)\n")
+        f.write(f'write_once("Data Boundary") {{\n -50 {30 * len(SMILES) + 50} xlo xhi\n'
+                ' -50 50 ylo yhi\n -50 50 zlo zhi\n}\n')
     r = subprocess.run(["moltemplate.sh", "system.lt"], cwd=d, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-2000:]
     return d, mols
@@ -260,3 +260,27 @@ def test_dihedrals_vs_paper_rules(built):
     for x in diffs:
         print(x)
     assert not unexpected, unexpected
+
+
+def test_lammps_vacuum_single_point(built):
+    """진공(직접합) 설정으로 바꾼 입력을 LAMMPS 가 읽고 유한한 에너지를 내는지."""
+    lammps = pytest.importorskip("lammps")
+    d, _ = built
+    vac = d / "vac"
+    vac.mkdir(exist_ok=True)
+    init = (d / "system.in.init").read_text().replace("lj/cut/coul/long", "lj/cut/coul/cut")
+    init = "\n".join(l for l in init.splitlines() if "kspace_style" not in l)
+    (vac / "system.in.init").write_text(init)
+    settings = (d / "system.in.settings").read_text()
+    assert "hbond/dreiding/lj" in settings
+    (vac / "system.in.settings").write_text(settings.replace("lj/cut/coul/long", "lj/cut/coul/cut"))
+    lmp = lammps.lammps(cmdargs=["-screen", "none", "-log", "none"])
+    lmp.command("boundary f f f")
+    lmp.file(str(vac / "system.in.init"))
+    lmp.command(f"read_data {d / 'system.data'}")
+    lmp.file(str(vac / "system.in.settings"))
+    lmp.command("thermo_style custom pe evdwl ecoul ebond eangle edihed eimp")
+    lmp.command("run 0")
+    e = {k: lmp.get_thermo(k) for k in ("pe", "evdwl", "ecoul", "ebond", "eangle", "edihed", "eimp")}
+    print(e)
+    assert all(abs(v) < 1e4 for v in e.values()), e
