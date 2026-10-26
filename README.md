@@ -86,12 +86,59 @@ m = new MOL
 `hybrid/overlay hbond/dreiding/lj ... lj/cut/coul/long` + `kspace_style ewald`이고,
 LAMMPS MOLECULE 패키지(`hbond/dreiding/lj`, `dihedral charmm`, `improper umbrella`)가 필요합니다.
 
+## SMILES가 없고 mol2·PDB만 있을 때
+
+`--smiles`는 필수입니다. DREIDING 라벨(`C_R`/`C_2`, `_b1` 등)이 결합 차수로 정해지는데,
+결합 차수와 형식 전하를 SMILES에서만 가져오기 때문입니다(mol2의 결합 차수 열은 쓰지 않음).
+
+SMILES가 없으면 아래처럼 좌표에서 결합 차수를 추정해 SMILES를 먼저 만든 뒤 넣으면 됩니다.
+RDKit `DetermineBonds`를 쓰며, 파일의 결합 정보는 무시하고 좌표만 사용합니다.
+
+```python
+# guess_smiles.py — 사용: python3 guess_smiles.py ip.mol2 0   (마지막 인자는 계 전체 총 전하)
+import sys
+from rdkit import Chem
+from rdkit.Chem import rdDetermineBonds
+
+path, charge = sys.argv[1], int(sys.argv[2])
+if path.endswith(".pdb"):
+    mol = Chem.MolFromPDBFile(path, removeHs=False, sanitize=False, proximityBonding=False)
+else:
+    mol = Chem.MolFromMol2File(path, removeHs=False, sanitize=False, cleanupSubstructures=False)
+rw = Chem.RWMol(mol)
+for b in list(rw.GetBonds()):
+    rw.RemoveBond(b.GetBeginAtomIdx(), b.GetEndAtomIdx())
+for a in rw.GetAtoms():
+    a.SetFormalCharge(0)
+    a.SetNoImplicit(True)
+mol = rw.GetMol()
+rdDetermineBonds.DetermineBonds(mol, charge=charge)
+print(Chem.MolToSmiles(Chem.RemoveHs(mol)))
+```
+
+```bash
+smi=$(python3 guess_smiles.py ip.mol2 0)
+echo "$smi"                                   # 반드시 눈으로 확인
+python3 dreiding_lt.py --smiles "$smi" --mol2 ip.mol2 -o single_molecule.lt --name MOL
+```
+
+주의할 점은 다음과 같습니다.
+
+- **H가 모두 들어 있는 구조**여야 합니다. 총 전하는 직접 넣어야 합니다(이온쌍이면 보통 0).
+- **공명 구조가 여러 개인 이온은 다른 표기로 나올 수 있습니다.** 예를 들어 TFSI⁻는 음전하가
+  N이 아닌 O에, S=N 이중결합으로 추정되어 N 라벨이 `N_R_d1` 대신 `N_2_d1`이 됩니다. 출력된
+  SMILES가 의도한 구조와 다르면 직접 고쳐서 넣으십시오.
+- **좌표와 전하는 mol2에서만 읽습니다.** PDB만 있으면 위 방법으로 SMILES는 얻을 수 있지만,
+  `--mol2` 없이 실행하면 좌표는 RDKit이 새로 만들고 전하는 0이 됩니다. PDB 좌표와 RESP 전하를
+  쓰려면 mol2로 바꿔서 넣으십시오.
+
 ## mol2 요구 사항
 
 - 원소는 원자 타입 열(SYBYL `C.ar`, GAFF `ca` 등)에서 읽고, 안 되면 원자 이름 앞 글자로 읽습니다.
 - 전하는 9번째 열을 씁니다. 없으면 0으로 두고 경고합니다.
-- SMILES와 mol2는 원소+연결 구조로 원자를 대응시키므로 mol2의 결합 차수 열은 무시합니다.
-  원자·결합 수나 연결 구조가 다르면 멈춥니다.
+- **원자 순서는 맞출 필요가 없습니다.** SMILES와 mol2의 원자를 원소+연결 구조(그래프 동형)로
+  자동 대응시키고, 출력 `.lt`는 mol2의 원자 순서를 그대로 따릅니다. 그래서 mol2의 결합 차수
+  열은 쓰지 않고 BOND 섹션의 연결 정보만 씁니다. 원자·결합 수나 연결 구조가 다르면 멈춥니다.
 - 전하 합이 SMILES의 형식 전하와 다르면 경고합니다.
 
 ## 타입 규칙 요약
