@@ -51,3 +51,15 @@
   겹쳐 LAMMPS LJ 에너지가 1e9 가 나옴 → 조각마다 따로 임베딩하고 x 축으로 4 Å 띄움.
 - 진공 직접합: in.init/in.settings 의 lj/cut/coul/long → lj/cut/coul/cut,
   kspace_style 삭제, boundary f f f 로 LAMMPS 2024-08-29 에서 읽힘 확인.
+
+## 2단계 결정 (2026-10-26)
+- 사용자 요청: moltemplate.sh 까지 연결, 라벨은 dreiding.lt 것을 최대한 살리되 정확도 우선.
+- 아마이드는 현재 방식 유지(C–N 단일, 장벽 5) — 매뉴얼 방식(C–N 이중, 장벽 45)보다
+  실제(1.33 Å, 15–20 kcal/mol)에 가까움. 사용자가 "추천대로" 선택.
+- 매뉴얼 예시와 라벨 이름이 다른 경우(사이클로펜타디에논, 이미다졸 N–H)는 이름 맞추기
+  대신 moltemplate 결과 계수가 같음을 테스트로 보장. 매뉴얼은 예시만 있고 일반 규칙이
+  아니라서 이름을 강제로 맞출 기준이 없음.
+- cleanup_moltemplate.sh 로 타입 수가 107→8 (atom), 17576→5 (dihedral) 로 줄어듦.
+  단, 주개가 없으면 hbond pair_coeff 가 모두 사라져 LAMMPS 가
+  "hbond/dreiding/lj is not used" 로 멈춤 → pair_style 에서 제거해야 함.
+  hybrid/overlay 에 sub-style 하나만 남겨도 LAMMPS 가 읽음(확인).
