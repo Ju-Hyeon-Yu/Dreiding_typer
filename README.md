@@ -75,6 +75,17 @@ moltemplate.sh system.lt        # system.data, system.in.init, system.in.setting
 있는** 조합 중 플래그가 가장 적은 것으로 고릅니다. 판정은 `dreiding.lt`의 규칙을 직접
 읽어 하므로 moltemplate 결과와 같습니다. 만족하는 조합이 없으면 멈춥니다.
 
+### 라벨 매뉴얼 예시와의 관계
+
+모든 라벨은 moltemplate `dreiding.lt`에 정의된 것만 씁니다. 매뉴얼 그림 예시와 이름이
+다른 경우가 있지만, moltemplate가 붙이는 결합·각·이면각·improper 계수가 모두 같음을
+테스트로 확인했습니다(사이클로펜타디에논, 이미다졸 N–H).
+
+예외는 아마이드 하나입니다. 매뉴얼 예시(`C_2` + `N_2_b1_d2_hd`)는 C–N을 이중결합
+(평형 1.275 Å, 회전 장벽 45 kcal/mol)으로 넣고, 이 도구(`C_2_b1` + `N_R_b1_d2_hd`)는
+단일결합(1.31 Å, 장벽 5 kcal/mol)으로 넣습니다. 실제 아마이드(약 1.33 Å, 15–20 kcal/mol)에
+더 가까운 쪽을 택했습니다.
+
 ## 알려진 한계 (경고로 표시)
 
 - **3·4배위 S(술포네이트, 술폰, TFSI)** — DREIDING에 해당 타입이 없어 `S_3`(H₂S 기준,

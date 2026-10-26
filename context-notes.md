@@ -63,3 +63,8 @@
   단, 주개가 없으면 hbond pair_coeff 가 모두 사라져 LAMMPS 가
   "hbond/dreiding/lj is not used" 로 멈춤 → pair_style 에서 제거해야 함.
   hybrid/overlay 에 sub-style 하나만 남겨도 LAMMPS 가 읽음(확인).
+
+## 범위 확정 (2026-10-26)
+- 사용자: 출력은 단일 분자 `.lt`(import "dreiding.lt" + `<이름> inherits DREIDING`)까지만.
+  system.lt 와 moltemplate.sh 실행은 사용자가 직접 함 → `--lammps` 파이프라인 되돌림.
+- moltemplate.sh 는 테스트에서 .lt 검증 용도로만 씀.
