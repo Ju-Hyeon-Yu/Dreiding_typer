@@ -6,14 +6,14 @@ import pytest
 from rdkit import Chem
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from dreiding_typer import TypingError, assign_labels, implied_order, load_labels  # noqa: E402
+from dreiding_typer import DreidingFF, TypingError, assign_labels  # noqa: E402
 
-LABELS = load_labels()
+FF = DreidingFF()
 
 
 def typed(smiles):
     mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
-    labs, warns = assign_labels(mol, LABELS)
+    labs, warns = assign_labels(mol, FF)
     heavy = [labs[a.GetIdx()] for a in mol.GetAtoms() if a.GetSymbol() != "H"]
     hyd = sorted({labs[a.GetIdx()] for a in mol.GetAtoms() if a.GetSymbol() == "H"})
     return heavy, hyd, warns, mol, labs
@@ -29,7 +29,7 @@ def check_orders(mol, labs):
         resonant = b.GetIsAromatic() or ("_R" in labs[i] and "_R" in labs[j] and
                                          not (b.GetBeginAtom().IsInRing() or b.GetEndAtom().IsInRing()))
         e = 1.5 if resonant else b.GetBondTypeAsDouble()
-        assert implied_order(labs[i], labs[j]) == e, (labs[i], labs[j], e)
+        assert FF.bond_order(labs[i], labs[j]) == e, (labs[i], labs[j], e)
 
 
 @pytest.mark.parametrize("smiles, heavy, hyd", [

@@ -3,8 +3,9 @@
 
 라벨 체계: m-bone/moltemplate-DREIDING 의 DREIDING_Label_Manual.pdf
   <원소>_<혼성>[_b1|_b2][_dN][_hd|_ha]
-결합 차수는 라벨 쌍으로 정해지므로(implied_order), _b1/_b2 플래그를
-제약 만족 탐색으로 골라 실제 결합 차수와 일치시킨다.
+결합 차수는 라벨 쌍으로 정해지므로 _b1/_b2 플래그를 제약 만족 탐색으로
+골라 실제 결합 차수와 일치시키고, 모든 결합에 이면각 규칙이 있는 조합만 고른다.
+판정은 dreiding.lt 의 규칙을 직접 읽어서 한다(DreidingFF).
 """
 import os
 import re
@@ -22,46 +23,71 @@ def default_lt_path():
     return os.path.join(os.path.dirname(moltemplate.__file__), "force_fields", "dreiding.lt")
 
 
-def load_labels(path=None):
-    """dreiding.lt 의 Data Masses 블록에서 허용 라벨과 질량을 읽는다."""
-    path = path or default_lt_path()
-    labels, inside = {}, False
-    with open(path) as f:
-        for line in f:
-            if 'write_once("Data Masses")' in line:
-                inside = True
-                continue
-            if inside:
-                if line.strip().startswith("}"):
-                    break
-                m = re.match(r"\s*@atom:(\S+)\s+(\S+)", line)
+class DreidingFF:
+    """dreiding.lt 에서 라벨, 결합 규칙, 이면각 규칙을 읽어 실제 할당 결과를 조회한다.
+
+    moltemplate 의 "By Type" 규칙은 와일드카드(*)를 쓰고, 여러 규칙이 맞으면
+    파일에서 나중 규칙이 이긴다. 결합 차수는 그 규칙의 힘상수 K/350 으로 얻는다.
+    """
+
+    def __init__(self, path=None):
+        self.path = path or default_lt_path()
+        self.labels = {}
+        bond_rules, bond_k, self.dih_rules = [], {}, []
+        section = None
+        with open(self.path) as f:
+            for line in f:
+                s = line.strip()
+                m = re.match(r'write_once\("([^"]+)"\)', s)
                 if m:
-                    labels[m.group(1)] = float(m.group(2))
-    if not labels:
-        raise TypingError(f"{path} 에서 Data Masses 라벨을 찾지 못했습니다")
-    return labels
+                    section = m.group(1)
+                    continue
+                if s.startswith("}"):
+                    section = None
+                    continue
+                t = s.split()
+                if section == "Data Masses" and t and t[0].startswith("@atom:"):
+                    self.labels[t[0][6:]] = float(t[1])
+                elif section == "Data Bonds By Type" and t and t[0].startswith("@bond:"):
+                    bond_rules.append((t[0][6:], _pat(t[1]), _pat(t[2])))
+                elif section == "Data Dihedrals By Type" and t and t[0].startswith("@dihedral:"):
+                    self.dih_rules.append((_pat(t[2]), _pat(t[3])))
+                elif t[:1] == ["bond_coeff"]:
+                    bond_k[t[1][6:]] = float(t[2])
+        if not self.labels:
+            raise TypingError(f"{self.path} 에서 Data Masses 라벨을 찾지 못했습니다")
+        self.bond_rules = [(a, b, bond_k[n]) for n, a, b in bond_rules]
+        self._order, self._dih = {}, {}
+
+    def bond_order(self, a, b):
+        """라벨 쌍에 moltemplate 가 붙이는 결합의 차수 (K/350). 규칙이 없으면 None."""
+        key = (a, b) if a <= b else (b, a)
+        if key not in self._order:
+            k = None
+            for pa, pb, kk in self.bond_rules:
+                if (pa.match(a) and pb.match(b)) or (pa.match(b) and pb.match(a)):
+                    k = kk
+            self._order[key] = None if k is None else k / 350.0
+        return self._order[key]
+
+    def has_dihedral(self, j, k):
+        """J–K 를 중심으로 하는 이면각 규칙이 하나라도 있는지."""
+        key = (j, k) if j <= k else (k, j)
+        if key not in self._dih:
+            self._dih[key] = any((pj.match(j) and pk.match(k)) or (pj.match(k) and pk.match(j))
+                                 for pj, pk in self.dih_rules)
+        return self._dih[key]
+
+
+def _pat(token):
+    """'@atom:C_R*' → 와일드카드 정규식."""
+    body = token.split(":", 1)[1]
+    return re.compile("^" + ".*".join(re.escape(x) for x in body.split("*")) + "$")
 
 
 def sp2_class(label):
     """결합 차수 플래그(_b1/_b2)가 의미 있는 sp2/공명/sp 계열 라벨인지."""
     return any(t in label for t in ("_2", "_R", "_1"))
-
-
-def implied_order(a, b):
-    """라벨 쌍이 dreiding.lt 에서 갖는 결합 차수 (Dreiding_bond.py 의 판정 순서 그대로)."""
-    if "_b1" in a and "_b1" in b:
-        return 1.0
-    if "_b2" in a and "_b2" in b:
-        return 2.0
-    if ("_b2" in a and "_2" in b) or ("_2" in a and "_b2" in b):
-        return 1.0
-    if "_1" in a and "_1" in b:
-        return 3.0
-    if "_2" in a and "_2" in b:
-        return 2.0
-    if "_R" in a and "_R" in b:
-        return 1.5
-    return 1.0
 
 
 def _resonance_groups(mol):
@@ -188,8 +214,8 @@ def _expected_orders(mol, res_bonds):
     return exp
 
 
-def assign_labels(mol, labels, max_steps=1_000_000):
-    """mol(명시적 H 포함, sanitize 완료) → (라벨 리스트, 경고 리스트)."""
+def assign_labels(mol, ff, max_steps=1_000_000):
+    """mol(명시적 H 포함, sanitize 완료), ff(DreidingFF) → (라벨 리스트, 경고 리스트)."""
     warnings = []
     groups = _resonance_groups(mol)
     res_atoms, res_bonds = set(), set()
@@ -208,7 +234,7 @@ def assign_labels(mol, labels, max_steps=1_000_000):
         flaggable = sp2_class(eh)
         bflags = ("", "_b1", "_b2") if flaggable else ("",)
         hs = (h, "") if h else ("",)
-        c = [eh + b + d + hh for hh in hs for b in bflags if eh + b + d + hh in labels]
+        c = [eh + b + d + hh for hh in hs for b in bflags if eh + b + d + hh in ff.labels]
         if not c:
             raise TypingError(f"원자 {atom.GetIdx() + 1} ({atom.GetSymbol()}): "
                               f"'{eh}{d}' 계열 라벨이 dreiding.lt 에 없습니다")
@@ -251,16 +277,22 @@ def assign_labels(mol, labels, max_steps=1_000_000):
             c += 10.0
         return c
 
-    def ok(i):
-        for j in adj[i]:
-            if chosen[j] is None or not (sp2_class(chosen[i]) and sp2_class(chosen[j])):
-                continue
-            key = tuple(sorted((i, j)))
-            if abs(implied_order(chosen[i], chosen[j]) - exp[key]) > 1e-6:
-                return False
+    deg = [a.GetDegree() for a in mol.GetAtoms()]
+
+    def bond_ok(i, j):
+        a, b = chosen[i], chosen[j]
+        # 이면각 규칙이 없으면 moltemplate 가 그 이면각을 조용히 빼므로 금지
+        if deg[i] > 1 and deg[j] > 1 and not ff.has_dihedral(a, b):
+            return False
+        if sp2_class(a) and sp2_class(b):
+            o = ff.bond_order(a, b)
+            return o is not None and abs(o - exp[tuple(sorted((i, j)))]) < 1e-6
         return True
 
-    # 분기 한정 탐색: 결합 차수를 모두 만족하는 조합 중 비용 최소
+    def ok(i):
+        return all(bond_ok(i, j) for j in adj[i] if chosen[j] is not None)
+
+    # 분기 한정 탐색: 결합 차수·이면각 규칙을 모두 만족하는 조합 중 비용 최소
     best, best_cost, steps = None, float("inf"), 0
 
     def solve(k, acc):
@@ -282,21 +314,28 @@ def assign_labels(mol, labels, max_steps=1_000_000):
 
     solve(0, 0.0)
     if best is None:
-        raise TypingError("모든 결합 차수를 만족하는 _b1/_b2 플래그 조합이 없습니다 "
-                          "(DREIDING 라벨 체계로 표현할 수 없는 결합 패턴)")
+        bad = [f"{i + 1}-{j + 1}" for (i, j) in exp
+               if len(cands[i]) == 1 and len(cands[j]) == 1 and not bond_ok(i, j)]
+        raise TypingError("결합 차수와 이면각 규칙을 모두 만족하는 _b1/_b2 플래그 조합이 없습니다 "
+                          "(DREIDING 라벨 체계로 표현할 수 없는 결합 패턴)"
+                          + (f" — 고정 라벨끼리 맞지 않는 결합: {', '.join(bad)}" if bad else ""))
     if steps > max_steps:
         warnings.append("플래그 탐색 단계 한도에 걸려 최소 비용 해가 아닐 수 있습니다(결합 차수는 만족)")
     chosen = best
 
-    # sp3/할로젠/S 쪽이 낀 결합(S=O 등)은 DREIDING 한계라 경고, sp2 끼리 불일치는 오류
+    # sp3/할로젠/S 쪽이 낀 결합(S=O 등)은 DREIDING 한계라 경고
     for (i, j), e in exp.items():
-        imp = implied_order(chosen[i], chosen[j])
+        imp = ff.bond_order(chosen[i], chosen[j])
+        if imp is None:
+            raise TypingError(f"결합 {i + 1}-{j + 1} ({chosen[i]}–{chosen[j]}): dreiding.lt 에 결합 규칙이 없습니다")
         if abs(imp - e) > 1e-6:
-            if sp2_class(chosen[i]) and sp2_class(chosen[j]):
-                raise TypingError(f"결합 {i + 1}-{j + 1} ({chosen[i]}–{chosen[j]}): 실제 차수 {e:g} 와 "
-                                  f"라벨 차수 {imp:g} 가 다릅니다")
             warnings.append(f"결합 {i + 1}-{j + 1} ({chosen[i]}–{chosen[j]}): 실제 차수 {e:g} 를 "
                             f"DREIDING 에서 {imp:g} 로 둡니다")
+    # N_3 라벨은 이웃 3개를 가정해 이면각 장벽을 나누므로 4배위 N 은 장벽이 1.5배 커짐
+    for i, lab in enumerate(chosen):
+        if lab.startswith("N_3") and deg[i] == 4:
+            warnings.append(f"원자 {i + 1} N: 4배위 N({lab})은 dreiding.lt 가 이웃 3개를 가정해 "
+                            "이 N 을 지나는 이면각 장벽이 1.5배로 들어갑니다")
     for i, h in enumerate(wanted_h):
         if h and not chosen[i].endswith(h):
             warnings.append(f"원자 {i + 1}: '{chosen[i]}{h}' 라벨이 없어 수소결합 플래그 {h} 를 뺐습니다")
