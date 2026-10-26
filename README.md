@@ -12,28 +12,37 @@ SMILES(필요하면 RESP 전하가 든 mol2와 함께)에서 moltemplate DREIDIN
 
 ## 설치
 
+miniconda 환경에 설치하면 그 환경을 활성화했을 때만 `dreiding-lt` 명령이 잡힙니다.
+
 ```bash
-git clone https://github.com/Ju-Hyeon-Yu/Dreiding_typer.git
-cd Dreiding_typer
-pip install rdkit moltemplate
+conda activate 내환경
+git clone https://github.com/Ju-Hyeon-Yu/Dreiding_typer.git ~/Dreiding_typer
+cd ~/Dreiding_typer
+pip install -e .                 # rdkit, moltemplate 가 없으면 함께 설치
 ```
 
-Python 3.9 이상, RDKit, moltemplate가 필요합니다. 라벨 목록과 규칙은 설치된 moltemplate의
-`dreiding.lt`에서 실행할 때마다 읽습니다.
+- `-e`(편집 가능 설치)라서 이후 `git pull`만 하면 재설치 없이 바로 반영됩니다.
+- 명령은 그 환경의 `bin`에만 생기므로 다른 환경이나 base에서는 보이지 않습니다.
+- RDKit을 conda로 이미 설치했다면(`conda install -c conda-forge rdkit`) pip는 그대로 둡니다.
+- 지우려면 그 환경에서 `pip uninstall dreiding-typer`를 실행하면 됩니다.
+- 파이썬 코드에서도 `from dreiding_typer import DreidingFF, assign_labels`로 불러 쓸 수 있습니다.
+
+Python 3.9 이상이 필요합니다. 라벨 목록과 규칙은 설치된 moltemplate의 `dreiding.lt`에서
+실행할 때마다 읽습니다.
 
 ## 사용법
 
 ```bash
 # RESP 전하가 든 mol2 사용 — 원자 순서·좌표·전하는 mol2 그대로, 결합 차수는 SMILES에서
-python3 dreiding_lt.py --smiles "Cn1cc[n+](C)c1.[O-]S(=O)(=O)C(F)(F)F" \
+dreiding-lt --smiles "Cn1cc[n+](C)c1.[O-]S(=O)(=O)C(F)(F)F" \
     --mol2 ip.mol2 -o single_molecule.lt --name MOL
 
 # SMILES만 — RDKit 3D 구조, 전하 0 (경고 표시)
-python3 dreiding_lt.py --smiles "CCO" -o ethanol.lt --name MOL
+dreiding-lt --smiles "CCO" -o ethanol.lt --name MOL
 
 # 여러 분자는 셸 반복문으로 (list.csv: 이름,SMILES)
 while IFS=, read name smi; do
-  python3 dreiding_lt.py --smiles "$smi" --mol2 "$name.mol2" -o "$name.lt" --name "$name"
+  dreiding-lt --smiles "$smi" --mol2 "$name.mol2" -o "$name.lt" --name "$name"
 done < list.csv
 ```
 
@@ -119,7 +128,7 @@ print(Chem.MolToSmiles(Chem.RemoveHs(mol)))
 ```bash
 smi=$(python3 guess_smiles.py ip.mol2 0)
 echo "$smi"                                   # 반드시 눈으로 확인
-python3 dreiding_lt.py --smiles "$smi" --mol2 ip.mol2 -o single_molecule.lt --name MOL
+dreiding-lt --smiles "$smi" --mol2 ip.mol2 -o single_molecule.lt --name MOL
 ```
 
 주의할 점은 다음과 같습니다.
@@ -181,15 +190,16 @@ python3 dreiding_lt.py --smiles "$smi" --mol2 ip.mol2 -o single_molecule.lt --na
 
 | 파일 | 내용 |
 |---|---|
-| `dreiding_lt.py` | CLI — SMILES/mol2 입력, 원자 대응, `.lt` 쓰기 |
+| `dreiding_lt.py` | CLI(`dreiding-lt` 명령) — SMILES/mol2 입력, 원자 대응, `.lt` 쓰기 |
 | `dreiding_typer.py` | 타이퍼 — 라벨 규칙, `dreiding.lt` 규칙 파서, `_b1`/`_b2` 탐색 |
+| `pyproject.toml` | pip 설치 설정 (`dreiding-lt` 명령 등록) |
 | `tests/` | 단위·통합 테스트 |
 | `plan.md`, `checklist.md`, `context-notes.md` | 설계 계획, 작업 목록, 결정과 근거 기록 |
 
 ## 테스트
 
 ```bash
-pip install pytest lammps        # lammps 는 LAMMPS 단일점 테스트용 (없으면 그 테스트만 건너뜀)
+pip install -e ".[test]"         # pytest, lammps (lammps 가 없으면 LAMMPS 테스트만 건너뜀)
 python3 -m pytest -q tests       # moltemplate 실행 포함 약 1분
 ```
 

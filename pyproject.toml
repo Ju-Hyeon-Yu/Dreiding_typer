@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dreiding-typer"
+version = "0.1.0"
+description = "SMILES(+RESP mol2) → moltemplate DREIDING 단일 분자 .lt 생성기"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+dependencies = ["rdkit", "moltemplate"]
+
+[project.optional-dependencies]
+test = ["pytest", "lammps"]
+
+[project.scripts]
+dreiding-lt = "dreiding_lt:main"
+
+[tool.setuptools]
+py-modules = ["dreiding_lt", "dreiding_typer"]
