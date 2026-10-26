@@ -29,31 +29,26 @@ done < list.csv
 붙습니다. 화면에 원자별 라벨이 출력되고, DREIDING으로 정확히 표현할 수 없는 부분은
 `경고:`로 표준 오류에 나옵니다.
 
-### moltemplate.sh까지 한 번에 (`--lammps`)
+### moltemplate로 LAMMPS 입력 만들기
 
 ```bash
-# 주기 경계 + Ewald (dreiding.lt 기본 설정)
-python3 dreiding_lt.py --smiles "..." --mol2 ip.mol2 -o ip.lt --lammps run_ip
-
-# 진공 직접합 (kspace 없음, boundary s s s, cutoff 100 Å)
-python3 dreiding_lt.py --smiles "..." --mol2 ip.mol2 -o ip.lt --lammps run_ip --vacuum
+cat > system.lt <<'EOF'
+import "ip.lt"
+m = new ip
+write_once("Data Boundary") {
+  -30 30 xlo xhi
+  -30 30 ylo yhi
+  -30 30 zlo zhi
+}
+EOF
+moltemplate.sh system.lt        # system.data, system.in.init, system.in.settings 생성
 ```
 
-`run_ip/` 폴더에서 다음 순서로 처리합니다.
-
-1. `system.lt`를 쓰고 분자 좌표 범위 ± `--pad`(기본 10 Å)로 상자를 정합니다.
-2. `moltemplate.sh system.lt`를 실행합니다.
-3. `cleanup_moltemplate.sh`로 쓰지 않는 타입을 걷어냅니다. 원자 타입은 107개에서 수 개로,
-   이면각 타입은 17576개에서 수 개로 줄어듭니다. `--no-cleanup`으로 끌 수 있습니다.
-4. 수소결합 주개가 없으면 `pair_style`에서 `hbond/dreiding/lj`를 뺍니다. 그대로 두면 LAMMPS가
-   "sub-style is not used" 오류로 멈춥니다.
-5. `--vacuum`이면 `lj/cut/coul/long` → `lj/cut/coul/cut`, `kspace_style` 삭제,
-   `boundary s s s`를 넣습니다. cutoff는 `--cutoff`로 바꿀 수 있습니다.
-
-결과 파일은 `system.data`, `system.in.init`, `system.in.settings`이고, moltemplate가 만든
-`run.in.EXAMPLE`이 이 셋을 읽는 예시입니다. 실행 로그는 `moltemplate.log`, `cleanup.log`에
-남습니다. LAMMPS는 MOLECULE 패키지(`hbond/dreiding/lj`, `dihedral charmm`,
-`improper umbrella`)가 필요합니다.
+`dreiding.lt` 기본 설정은 `hybrid/overlay hbond/dreiding/lj ... lj/cut/coul/long` +
+`kspace_style ewald`입니다. 진공에서 직접합으로 계산하려면 `system.in.init`과
+`system.in.settings`의 `lj/cut/coul/long`을 `lj/cut/coul/cut`으로 바꾸고
+`kspace_style` 줄을 지우면 됩니다. LAMMPS는 MOLECULE 패키지(`hbond/dreiding/lj`,
+`dihedral charmm`, `improper umbrella`)가 필요합니다.
 
 ## mol2 요구 사항
 
@@ -80,17 +75,6 @@ python3 dreiding_lt.py --smiles "..." --mol2 ip.mol2 -o ip.lt --lammps run_ip --
 있는** 조합 중 플래그가 가장 적은 것으로 고릅니다. 판정은 `dreiding.lt`의 규칙을 직접
 읽어 하므로 moltemplate 결과와 같습니다. 만족하는 조합이 없으면 멈춥니다.
 
-### 라벨 매뉴얼 예시와의 관계
-
-모든 라벨은 moltemplate `dreiding.lt`에 정의된 것만 씁니다. 매뉴얼 그림 예시와 이름이
-다른 경우가 있지만, moltemplate가 붙이는 결합·각·이면각·improper 계수가 모두 같음을
-테스트로 확인했습니다(사이클로펜타디에논, 이미다졸 N–H).
-
-예외는 아마이드 하나입니다. 매뉴얼 예시(`C_2` + `N_2_b1_d2_hd`)는 C–N을 이중결합
-(평형 1.275 Å, 회전 장벽 45 kcal/mol)으로 넣고, 이 도구(`C_2_b1` + `N_R_b1_d2_hd`)는
-단일결합(1.31 Å, 장벽 5 kcal/mol)으로 넣습니다. 실제 아마이드(약 1.33 Å, 15–20 kcal/mol)에
-더 가까운 쪽을 택했습니다.
-
 ## 알려진 한계 (경고로 표시)
 
 - **3·4배위 S(술포네이트, 술폰, TFSI)** — DREIDING에 해당 타입이 없어 `S_3`(H₂S 기준,
@@ -103,15 +87,13 @@ python3 dreiding_lt.py --smiles "..." --mol2 ip.mol2 -o ip.lt --lammps run_ip --
 ## 테스트
 
 ```bash
-python3 -m pytest -q tests      # moltemplate·LAMMPS(pip install lammps) 필요
+python3 -m pytest -q tests      # 통합 테스트는 moltemplate 실행으로 약 20초
 ```
 
-통합 테스트(약 1분 30초)는 이온쌍, TFSI/BMIM, 아마이드, 카복실레이트, 니트로, 비페닐,
-공액 사슬 등 14개 분자를 moltemplate로 돌려 다음을 확인합니다.
+통합 테스트는 이온쌍, TFSI/BMIM, 아마이드, 카복실레이트, 니트로, 비페닐, 공액 사슬 등
+14개 분자를 moltemplate로 돌려 다음을 확인합니다.
 
 - 모든 결합의 힘상수가 350 × 기대 결합 차수와 같음
 - 모든 결합각·이면각이 타입을 받음 (누락 없음)
 - 이면각 계수가 Mayo 1990 규칙 (a)~(j)의 독립 구현과 같음 (위 한계 항목 제외)
 - 이온쌍 조각마다 molecule ID가 다르고, mol2 원자 순서·전하가 유지됨
-- 매뉴얼 예시 라벨과 도구 라벨의 moltemplate 계수가 같음
-- `--lammps` 출력(주기/진공, 수소결합 주개 있음/없음)을 LAMMPS가 읽고 단일점 계산이 됨

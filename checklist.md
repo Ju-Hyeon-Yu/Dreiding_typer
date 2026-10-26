@@ -16,9 +16,9 @@
 - [x] 사용법 README
 
 ## 2단계 — moltemplate.sh 연결 (2026-10-26)
-- [x] `--lammps DIR`: system.lt 작성 → moltemplate.sh 실행 → cleanup_moltemplate.sh
-- [x] 수소결합 쌍이 없으면 pair_style 에서 hbond/dreiding/lj 제거 (LAMMPS 오류 방지)
-- [x] `--vacuum`: lj/cut/coul/cut, kspace 삭제, boundary s s s, 큰 cutoff
-- [x] 매뉴얼 예시 라벨과 도구 라벨이 moltemplate 결과(모든 결합·각·이면각 계수)에서 같은지 테스트
-- [x] LAMMPS 로 파이프라인 출력 단일점 확인 테스트 (주개 있는 계/없는 계, 진공/주기)
-- [x] README 갱신
+- [ ] `--lammps DIR`: system.lt 작성 → moltemplate.sh 실행 → cleanup_moltemplate.sh
+- [ ] 수소결합 쌍이 없으면 pair_style 에서 hbond/dreiding/lj 제거 (LAMMPS 오류 방지)
+- [ ] `--vacuum`: lj/cut/coul/cut, kspace 삭제, boundary s s s, 큰 cutoff
+- [ ] 매뉴얼 예시 라벨과 도구 라벨이 moltemplate 결과(모든 결합·각·이면각 계수)에서 같은지 테스트
+- [ ] LAMMPS 로 파이프라인 출력 단일점 확인 테스트 (주개 있는 계/없는 계, 진공/주기)
+- [ ] README 갱신
