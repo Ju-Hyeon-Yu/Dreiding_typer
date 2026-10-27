@@ -68,3 +68,16 @@
 - 사용자: 출력은 단일 분자 `.lt`(import "dreiding.lt" + `<이름> inherits DREIDING`)까지만.
   system.lt 와 moltemplate.sh 실행은 사용자가 직접 함 → `--lammps` 파이프라인 되돌림.
 - moltemplate.sh 는 테스트에서 .lt 검증 용도로만 씀.
+
+## 3단계 — 오프라인 HTML (2026-10-28)
+- 요구: SMILES 필수 + (mol2/pdb/xyz 선택) → 타입 할당 .lt 다운로드·복사, 3D 뷰어에 타입 라벨,
+  타입을 한눈에 보는 요약. 팀 배포용이라 회사 Edge·인터넷 연결 없이 단일 파일로 동작해야 함.
+- 엔진: RDKit.js(MinimalLib 2026.09.1, Python RDKit 과 같은 버전) — 방향족성·AddHs 원자 순서가
+  Python 과 같음. wasm 7.4 MB → gzip+base64 3.2 MB 로 내장, DecompressionStream 으로 풀기.
+  Pyodide 는 내장 시 수십 MB 이고 이 환경에서 rdkit 휠을 받을 수 없어 제외.
+- RDKit.js 에는 3D 생성·결합 추정이 없음 → SMILES 필수(사용자 결정), SMILES 만일 때는
+  2D 좌표에서 DREIDING 결합·각 항 + 반발로 JS 최소화(사용자 결정 (a)).
+- 전하: mol2 는 파일 값, pdb/xyz/SMILES 만은 0 + 경고 (사용자 결정).
+- 규칙표는 빌드 때 Python DreidingFF 로 미리 계산해 JSON 으로 내장 → 판정이 Python 과 같음.
+- JS 타이퍼는 Python 의 반복 순서(후보 순서, 결합 순서, BFS, 동률 처리)까지 그대로 옮겨
+  결과가 같도록 함. mol2 입력일 때는 Python 처럼 원자를 파일 순서로 재번호한 뒤 타이핑.

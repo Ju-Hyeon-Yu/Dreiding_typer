@@ -18,3 +18,13 @@
 ## 2단계 (2026-10-26)
 - [x] 매뉴얼 예시 라벨과 도구 라벨이 moltemplate 결과(모든 결합·각·이면각 계수)에서 같은지 테스트
 - [취소] moltemplate.sh 실행·cleanup·LAMMPS 입력 보정 — 사용자는 .lt 까지만 원함
+
+## 3단계 — 오프라인 HTML 도구 (2026-10-28)
+- [ ] dreiding.lt 규칙표 추출 (web/build_tables.py)
+- [ ] 타이퍼 JS 이식 + Python 대조 테스트 (Node)
+- [ ] mol2/pdb/xyz 파서, SMILES 그래프 대응, .lt 작성 (Python CLI 출력과 동일성 테스트)
+- [ ] SMILES만일 때 JS 3D 생성 (DREIDING 결합·각 + 반발 최소화)
+- [ ] 화면: 입력, 경고, 타입 요약표, 3D 뷰어(라벨·호버·강조·색 모드), .lt 출력(복사·다운로드)
+- [ ] RDKit.js wasm 압축 내장 단일 HTML 빌드 (web/build.py)
+- [ ] Playwright 로 file:// 오프라인 로딩·입력별 결과 확인
+- [ ] README·메모 갱신, 커밋·push
