@@ -3,7 +3,9 @@
   "private": true,
   "description": "오프라인 단일 HTML DREIDING 타이퍼 빌드·테스트용",
   "scripts": {
-    "test": "node tests/test_web.js"
+    "test": "node tests/test_web.js",
+    "test:browser": "node tests/test_browser.js",
+    "build": "python3 build.py"
   },
   "devDependencies": {
     "@rdkit/rdkit": "2026.9.1"

@@ -69,8 +69,14 @@ def main():
         rule = last_match(angle_rules, ["X", c, "X"])
         if rule:
             theta0[c] = angle_t0[rule]
+    try:
+        from importlib.metadata import version
+        mt = version("moltemplate")
+    except Exception:
+        mt = "unknown"
     out = {
         "source": os.path.basename(ff.path),
+        "moltemplate": mt,
         "labels": {k: ff.labels[k] for k in labels},
         "pairs": pairs,          # "A|B" (A<=B) → [결합 차수, r0, 이면각 규칙 유무]
         "theta0": theta0,        # 중심 라벨 → 평형각(도)

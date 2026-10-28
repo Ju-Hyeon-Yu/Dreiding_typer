@@ -1,0 +1,217 @@
+<!doctype html>
+<!-- 오프라인 단일 파일 DREIDING 타입 할당 도구 (web/build.py 가 스크립트·규칙표·RDKit.js 를 끼워 넣음) -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DREIDING 타입 할당</title>
+<style>
+:root {
+  --bg: #E7EBEF; --surface: #FFFFFF; --ink: #17212B; --muted: #57646F; --line: #C9D1D8;
+  --accent: #0B6E78; --accent-ink: #FFFFFF; --warn: #8A5A00; --warn-bg: #FFF4DC; --err: #A3261B; --err-bg: #FDE9E6;
+  --stage: #121B24; --stage-line: #24313D; --stage-ink: #C9D6E2; --focus: #2A8FD6;
+  --mono: "Cascadia Mono", Consolas, "SFMono-Regular", Menlo, monospace;
+  --sans: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F151B; --surface: #172029; --ink: #E2E9EF; --muted: #93A1AD; --line: #2B3946;
+    --accent: #38AEB8; --accent-ink: #062126; --warn: #F2C063; --warn-bg: #2E2410; --err: #FF9B8E; --err-bg: #34160F;
+    --stage: #0A1016; --stage-line: #1E2A35;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F151B; --surface: #172029; --ink: #E2E9EF; --muted: #93A1AD; --line: #2B3946;
+  --accent: #38AEB8; --accent-ink: #062126; --warn: #F2C063; --warn-bg: #2E2410; --err: #FF9B8E; --err-bg: #34160F;
+  --stage: #0A1016; --stage-line: #1E2A35;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.app { display: grid; grid-template-columns: minmax(300px, 360px) 1fr; grid-template-rows: auto 1fr auto;
+  gap: 14px; padding: 16px; min-height: 100vh; max-width: 1600px; margin: 0 auto; }
+header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+header h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); }
+#status { margin-left: auto; color: var(--muted); font-size: 13px; }
+#status.ready { color: var(--accent); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; }
+.inputs { display: flex; flex-direction: column; gap: 14px; align-self: start; }
+label.field { display: flex; flex-direction: column; gap: 5px; font-weight: 600; font-size: 13px; }
+label.field small { font-weight: 400; color: var(--muted); }
+input[type=text] { border: 1px solid var(--line); background: var(--bg); border-radius: 4px; padding: 8px 10px; width: 100%; }
+#smiles { font-family: var(--mono); font-size: 13px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.drop { border: 1.5px dashed var(--line); border-radius: 6px; padding: 14px; text-align: center; color: var(--muted);
+  cursor: pointer; transition: border-color .15s, background .15s; }
+.drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.drop strong { color: var(--ink); }
+.file-chip { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 13px;
+  background: var(--bg); border-radius: 4px; padding: 6px 8px; }
+.file-chip span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 4px; padding: 7px 12px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; padding: 9px 14px; }
+.btn.primary:disabled { opacity: .5; cursor: wait; }
+.btn.small { padding: 3px 8px; font-size: 12px; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; font-size: 13px; }
+.hint { color: var(--muted); font-size: 12.5px; margin: 0; }
+
+.msgs { display: flex; flex-direction: column; gap: 6px; }
+.msg { border-radius: 4px; padding: 7px 10px; font-size: 13px; border-left: 3px solid; }
+.msg.warn { background: var(--warn-bg); border-color: #D69A1E; color: var(--warn); }
+.msg.err { background: var(--err-bg); border-color: var(--err); color: var(--err); font-weight: 600; }
+
+.main { display: grid; grid-template-rows: minmax(380px, 58vh) auto; gap: 14px; min-width: 0; }
+.stage { position: relative; background: var(--stage); border: 1px solid var(--stage-line); border-radius: 6px;
+  overflow: hidden; min-height: 380px; }
+.stage canvas { display: block; touch-action: none; cursor: grab; }
+.stage canvas:active { cursor: grabbing; }
+.stage .empty { position: absolute; inset: 0; display: grid; place-items: center; color: #6F8293; text-align: center;
+  padding: 24px; pointer-events: none; }
+.toolbar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 8px; flex-wrap: wrap;
+  pointer-events: none; }
+.toolbar > * { pointer-events: auto; }
+.seg { display: inline-flex; background: rgba(10,16,22,.82); border: 1px solid var(--stage-line); border-radius: 5px; overflow: hidden; }
+.seg button { background: none; border: 0; color: var(--stage-ink); padding: 5px 10px; font-size: 12.5px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: #2A3B4B; color: #FFFFFF; }
+.seg .cap { color: #7D90A1; padding: 5px 4px 5px 10px; font-size: 12px; }
+.toolbar .spacer { flex: 1; }
+.legend { position: absolute; left: 10px; bottom: 10px; color: #7D90A1; font-size: 12px; pointer-events: none; }
+.legend b { color: #FFB020; font-weight: 600; }
+.tip { position: absolute; background: #F4F7FA; color: #142029; border-radius: 4px; padding: 6px 9px; font-size: 12.5px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35); pointer-events: none; display: flex; flex-direction: column; max-width: 280px; }
+.tip strong { font-family: var(--mono); font-size: 14px; }
+.tip em { color: #9A5B00; font-style: normal; font-weight: 600; }
+
+.types h2, .output h2 { font-size: 15px; margin: 0 0 4px; }
+.types .head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.types .head p { margin: 0; color: var(--muted); font-size: 13px; }
+.type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.tcard { display: grid; grid-template-columns: 14px 1fr auto; gap: 4px 9px; align-items: center; text-align: left;
+  border: 1px solid var(--line); background: var(--surface); border-radius: 5px; padding: 8px 10px; cursor: pointer; }
+.tcard:hover { border-color: var(--muted); }
+.tcard[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tcard .sw { width: 12px; height: 12px; border-radius: 50%; }
+.tcard .name { font-family: var(--mono); font-weight: 700; font-size: 13.5px; }
+.tcard .count { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.tcard .atoms { grid-column: 2 / -1; color: var(--muted); font-size: 12px; font-family: var(--mono); overflow-wrap: anywhere; }
+details.atom-list { margin-top: 12px; }
+details.atom-list summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.tablewrap { max-height: 320px; overflow: auto; margin-top: 8px; border: 1px solid var(--line); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--surface); color: var(--muted); font-weight: 600; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+td.lab { font-family: var(--mono); font-weight: 600; }
+tr.flag td { background: var(--warn-bg); }
+
+.output { grid-column: 1 / -1; }
+.output .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.output .head h2 { margin: 0 auto 0 0; }
+#lt { width: 100%; min-height: 260px; resize: vertical; font: 12.5px/1.45 var(--mono); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 4px; padding: 10px; white-space: pre; overflow: auto; }
+#copied { color: var(--accent); font-size: 13px; }
+footer { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+footer p { margin: 2px 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; padding: 12px; }
+  .main { grid-template-rows: minmax(320px, 60vh) auto; }
+  #status { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>DREIDING 타입 할당</h1>
+    <p>SMILES와 좌표 파일로 moltemplate용 단일 분자 .lt 파일을 만듭니다.</p>
+    <span id="status" role="status">RDKit 엔진을 준비하는 중입니다.</span>
+  </header>
+
+  <section class="panel inputs" aria-label="입력">
+    <label class="field">SMILES
+      <input id="smiles" type="text" spellcheck="false" autocomplete="off" placeholder="Cn1cc[n+](C)c1.[O-]S(=O)(=O)C(F)(F)F">
+      <small>이온쌍은 '.'으로 연결합니다. 결합 차수와 형식 전하는 SMILES에서 가져옵니다.</small>
+    </label>
+    <div>
+      <div class="field" style="margin-bottom:5px"><span style="font-weight:600;font-size:13px">좌표 파일 (선택)</span></div>
+      <div id="drop" class="drop" tabindex="0" role="button" aria-label="좌표 파일 고르기">
+        <strong>mol2, pdb, xyz</strong> 파일을 끌어다 놓거나 눌러서 고르십시오.
+      </div>
+      <input id="file" type="file" accept=".mol2,.pdb,.ent,.xyz" class="sr">
+      <div id="fileChip" class="file-chip" hidden><span id="fileName"></span>
+        <button class="btn small" id="clearFile" type="button">빼기</button></div>
+      <p class="hint" style="margin-top:6px">mol2는 좌표와 RESP 전하를, pdb·xyz는 좌표만 씁니다. 원자 순서는 자동으로 맞춥니다. 파일이 없으면 3D 구조를 새로 만듭니다.</p>
+    </div>
+    <div class="row2">
+      <label class="field">분자 이름<input id="molName" type="text" value="MOL" spellcheck="false"></label>
+      <label class="field">파일 이름<input id="outName" type="text" value="single_molecule.lt" spellcheck="false"></label>
+    </div>
+    <button id="run" class="btn primary" type="button" disabled>타입 할당</button>
+    <p class="hint">예시로 해 보기: <button class="link" type="button" data-example="Cn1cc[n+](Cc2ccc(I)cc2)c1.[O-]S(=O)(=O)C(F)(F)F">아이오도벤질 이미다졸륨 트리플레이트</button>,
+      <button class="link" type="button" data-example="CC(=O)Nc1ccccc1">아세트아닐라이드</button></p>
+    <div id="msgs" class="msgs" aria-live="polite"></div>
+  </section>
+
+  <div class="main">
+    <section class="stage" aria-label="3D 분자 보기">
+      <canvas id="view" tabindex="0" aria-label="분자 3D 보기. 끌어서 회전, 휠로 확대, Shift+끌기로 이동, 두 번 눌러 처음 보기"></canvas>
+      <div class="empty" id="empty">SMILES를 넣고 타입 할당을 누르면 여기에 분자와 원자 타입이 나타납니다.</div>
+      <div class="toolbar" id="toolbar" hidden>
+        <div class="seg" role="group" aria-label="라벨"><span class="cap">라벨</span>
+          <button type="button" data-label="main" aria-pressed="true" title="무거운 원자와 H_HB">주요 원자</button>
+          <button type="button" data-label="all" aria-pressed="false">전체</button>
+          <button type="button" data-label="none" aria-pressed="false">끄기</button></div>
+        <div class="seg" role="group" aria-label="색"><span class="cap">색</span>
+          <button type="button" data-color="type" aria-pressed="true">타입</button>
+          <button type="button" data-color="element" aria-pressed="false">원소</button></div>
+        <span class="spacer"></span>
+        <div class="seg"><button type="button" id="resetView">처음 보기</button><button type="button" id="png">PNG 저장</button></div>
+      </div>
+      <div class="legend" id="legend" hidden>끌어서 회전, 휠로 확대, Shift+끌기로 이동합니다. <b>주황 테두리</b>는 경고가 난 원자입니다.</div>
+      <div class="tip" id="tip" hidden></div>
+    </section>
+
+    <section class="panel types" aria-label="원자 타입">
+      <div class="head"><h2>원자 타입</h2><p id="typeSummary">타입을 누르면 해당 원자만 강조합니다.</p>
+        <button class="link" type="button" id="clearSel" hidden>강조 해제</button></div>
+      <div class="type-grid" id="typeGrid"><p class="hint">아직 결과가 없습니다.</p></div>
+      <details class="atom-list" id="atomDetails" hidden><summary id="atomSummary">원자별 목록</summary>
+        <div class="tablewrap"><table><thead><tr><th>#</th><th>이름</th><th>타입</th><th>전하</th><th>조각</th><th>x</th><th>y</th><th>z</th></tr></thead>
+        <tbody id="atomRows"></tbody></table></div></details>
+    </section>
+  </div>
+
+  <section class="panel output" aria-label=".lt 출력">
+    <div class="head"><h2 id="ltTitle">.lt 출력</h2><span id="copied" role="status"></span>
+      <button class="btn" id="copy" type="button" disabled>복사</button>
+      <button class="btn primary" id="download" type="button" disabled>내려받기</button></div>
+    <textarea id="lt" readonly spellcheck="false" aria-label=".lt 파일 내용" placeholder="타입을 할당하면 import &quot;dreiding.lt&quot; 로 시작하는 .lt 내용이 여기에 나옵니다."></textarea>
+  </section>
+
+  <footer>
+    <p>system.lt에서는 <code>import "single_molecule.lt"</code> 다음에 <code>m = new MOL</code>로 불러옵니다. 라벨 규칙은 moltemplate dreiding.lt(<span id="srcInfo"></span>)에서 미리 계산해 넣었고, 인터넷 연결 없이 동작합니다.</p>
+    <p>화학 처리는 RDKit.js (BSD-3-Clause, © RDKit 기여자)를 씁니다. 원본: github.com/Ju-Hyeon-Yu/Dreiding_typer</p>
+  </footer>
+</div>
+
+<script type="application/json" id="dreiding-tables">/*TABLES*/</script>
+<script type="application/octet-stream" id="rdkit-wasm">/*RDKIT_WASM_GZ_B64*/</script>
+<script>/*RDKIT_JS*/</script>
+<script>/*TYPER_JS*/</script>
+<script>/*IO_JS*/</script>
+<script>/*GEOM_JS*/</script>
+<script>/*PIPELINE_JS*/</script>
+<script>/*VIEWER_JS*/</script>
+<script>/*APP_JS*/</script>
+</body>
+</html>
