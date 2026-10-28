@@ -95,6 +95,39 @@ m = new MOL
 `hybrid/overlay hbond/dreiding/lj ... lj/cut/coul/long` + `kspace_style ewald`이고,
 LAMMPS MOLECULE 패키지(`hbond/dreiding/lj`, `dihedral charmm`, `improper umbrella`)가 필요합니다.
 
+## 오프라인 HTML 도구 (`dreiding_typer.html`)
+
+Python 없이 브라우저만으로 같은 일을 하는 단일 HTML 파일입니다. 저장소의
+`dreiding_typer.html` 하나만 내려받아 Edge나 Chrome에서 열면 되고, 인터넷 연결 없이 동작합니다
+(RDKit.js 엔진과 DREIDING 규칙표가 파일 안에 들어 있음, 약 3.6 MB).
+
+1. SMILES를 넣습니다(필수).
+2. 필요하면 좌표 파일(mol2, pdb, xyz)을 끌어다 놓습니다. 원자 순서는 자동으로 맞춥니다.
+   - mol2는 좌표와 RESP 전하를 씁니다.
+   - pdb·xyz는 좌표만 쓰고 전하는 0으로 둡니다. pdb에 CONECT가 없거나 xyz면 결합은 원자 간 거리로 판정합니다.
+   - 좌표 파일이 없으면 2D 좌표에서 DREIDING 결합·각 항으로 최소화한 3D 시작 구조를 만들고 전하는 0으로 둡니다.
+3. **타입 할당**을 누르면 결과가 나옵니다.
+   - 3D 뷰어에 원자마다 타입 라벨이 붙습니다. 끌어서 회전, 휠로 확대, Shift+끌기로 이동, 두 번 눌러 처음 보기입니다.
+     라벨은 주요 원자(무거운 원자와 `H_HB`)·전체·끄기, 색은 타입별·원소별로 바꿀 수 있습니다.
+   - **원자 타입** 카드에 타입별 개수와 원자 번호가 나오고, 카드를 누르면 그 타입 원자만 강조합니다.
+   - 원자에 마우스를 올리면 번호·이름·조각·전하가 나오고, 경고가 난 원자는 주황 테두리로 표시합니다.
+   - 아래 칸에 `.lt` 내용이 나오며 **복사**, **내려받기**(기본 `single_molecule.lt`)를 할 수 있습니다. 뷰어 그림은 PNG로 저장할 수 있습니다.
+
+타입 판정은 Python 타이퍼를 그대로 옮긴 것이라 결과가 같습니다. SMILES 128개의 라벨·경고·오류와,
+원자 순서를 섞은 mol2 12개 계의 `.lt` 전체가 Python CLI와 같음을 테스트로 확인했습니다. 좌표 파일 없이 만든
+3D 구조는 시작 구조일 뿐이니 MD 전에 에너지 최소화를 하십시오. SMILES의 입체 정보는 3D 생성에 반영되지 않습니다.
+
+### HTML 다시 빌드하기
+
+`web/src`의 코드를 고쳤거나 moltemplate의 `dreiding.lt`가 바뀌었을 때만 필요합니다.
+
+```bash
+cd web && npm install && cd ..        # RDKit.js (@rdkit/rdkit 2026.9.1)
+python3 web/build.py                  # → dreiding_typer.html
+cd web && npm test                    # Python 타이퍼와 대조 (Node)
+node tests/test_browser.js            # 빌드된 HTML 을 브라우저로 확인 (playwright 필요)
+```
+
 ## SMILES가 없고 mol2·PDB만 있을 때
 
 `--smiles`는 필수입니다. DREIDING 라벨(`C_R`/`C_2`, `_b1` 등)이 결합 차수로 정해지는데,
@@ -194,6 +227,10 @@ dreiding-lt --smiles "$smi" --mol2 ip.mol2 -o single_molecule.lt --name MOL
 | `dreiding_typer.py` | 타이퍼 — 라벨 규칙, `dreiding.lt` 규칙 파서, `_b1`/`_b2` 탐색 |
 | `pyproject.toml` | pip 설치 설정 (`dreiding-lt` 명령 등록) |
 | `tests/` | 단위·통합 테스트 |
+| `dreiding_typer.html` | 오프라인 단일 HTML 도구 (빌드 결과물) |
+| `web/src/` | HTML 도구 소스 — `typer.js`(타이퍼), `io.js`(파일·원자 대응·.lt), `geom.js`(3D 생성), `pipeline.js`, `viewer.js`, `app.js`, `index.html` |
+| `web/build.py`, `web/build_tables.py` | 규칙표 추출과 단일 HTML 빌드 |
+| `web/tests/` | Python 대조 테스트(Node)와 브라우저 테스트 |
 | `plan.md`, `checklist.md`, `context-notes.md` | 설계 계획, 작업 목록, 결정과 근거 기록 |
 
 ## 테스트
@@ -218,3 +255,4 @@ python3 -m pytest -q tests       # moltemplate 실행 포함 약 1분
 - Mayo, Olafson, Goddard, *J. Phys. Chem.* **94**, 8897 (1990) — DREIDING
 - [jewettaij/moltemplate](https://github.com/jewettaij/moltemplate) — `force_fields/dreiding.lt`
 - [m-bone/moltemplate-DREIDING](https://github.com/m-bone/moltemplate-DREIDING) — 라벨 매뉴얼
+- [RDKit.js](https://github.com/rdkit/rdkit-js) — HTML 도구의 화학 엔진 (BSD-3-Clause)

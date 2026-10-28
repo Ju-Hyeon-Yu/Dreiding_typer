@@ -81,3 +81,14 @@
 - 규칙표는 빌드 때 Python DreidingFF 로 미리 계산해 JSON 으로 내장 → 판정이 Python 과 같음.
 - JS 타이퍼는 Python 의 반복 순서(후보 순서, 결합 순서, BFS, 동률 처리)까지 그대로 옮겨
   결과가 같도록 함. mol2 입력일 때는 Python 처럼 원자를 파일 순서로 재번호한 뒤 타이핑.
+
+### 3단계 구현 중 드러난 것
+- 이 RDKit.js 빌드는 `wasmBinary` 옵션을 읽지 않아 file:// 에서 wasm 을 fetch 하다 실패함
+  → `instantiateWasm` 콜백으로 압축 해제한 바이트를 직접 넘김.
+- `.tip`, `.toolbar` 등 display 를 지정한 요소에서 `hidden` 속성이 무시됨 → `[hidden]{display:none!important}`.
+- 3D 생성: 4배위와 3배위 이상 S·P 중심은 사면체(109.47°)를 목표로 둠(DREIDING S_3 92.1° 를 쓰면
+  술포네이트가 찌그러짐). 3·4원 고리는 각이 맞지 않는 것이 정상이라 테스트에서 제외.
+  SMILES 만으로 만든 이온쌍 .lt 를 moltemplate→LAMMPS 진공 최소화하면 PE 75.8 → 60.5 kcal/mol 로
+  시작 구조가 무난함을 확인.
+- 뷰어 색 기본값은 '타입' — 타입 카드 색과 1:1 로 맞아 한눈에 확인하기 쉬움(사용자 요청).
+- 결과: 단일 HTML 3.57 MB, file:// 로딩 약 0.5 초, 외부 요청 0.
