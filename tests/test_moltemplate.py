@@ -31,6 +31,12 @@ SMILES = {
     "acetonitrile": "CC#N",
     "tma_iodide": "C[N+](C)(C)C.[I-]",
     "anilide": "CC(=O)Nc1ccccc1",
+    "aniline": "Nc1ccccc1",
+    "guanidinium": "NC(N)=[NH2+]",
+    "sulfonamide": "CS(N)(=O)=O",
+    "emim_bf4": "CCn1cc[n+](C)c1.F[B-](F)(F)F",
+    "pyridone": "O=c1cccc[nH]1",
+    "coumarin": "O=c1ccc2ccccc2o1",
 }
 
 
@@ -127,11 +133,11 @@ def expected_order(mol, i, j, labels):
     sp2 = all(any(t in labels[k] for t in ("_2", "_R", "_1")) for k in (i, j))
     if not sp2:
         return 1.0                       # S=O 등: DREIDING 은 단일결합만
-    if b.GetIsAromatic():
+    if b.GetIsAromatic() and "_R" in labels[i] and "_R" in labels[j]:
         return 1.5
-    if "_R" in labels[i] and "_R" in labels[j] and not (b.GetBeginAtom().IsInRing() or b.GetEndAtom().IsInRing()):
-        return 1.5                       # 공명 묶음(카복실레이트, 니트로)
-    return b.GetBondTypeAsDouble()
+    kek = Chem.Mol(mol)                  # 비방향족으로 바꾼 피리돈류 고리는 케쿨레 차수
+    Chem.Kekulize(kek, clearAromaticFlags=True)
+    return kek.GetBondWithIdx(b.GetIdx()).GetBondTypeAsDouble()
 
 
 def hyb(label):
@@ -255,8 +261,8 @@ def test_dihedrals_vs_paper_rules(built):
                 diffs.append((name, labels[a], labels[b], labels[c], labels[d], got, ref))
         elif (abs(got[0] - ref[0]) > 1e-3 or got[1] != ref[1] or got[2] != ref[2]):
             diffs.append((name, labels[a], labels[b], labels[c], labels[d], got, ref))
-    # 알려진 차이(S_3 4배위, N_3 4배위의 이웃 수 가정)는 따로 확인
-    unexpected = [x for x in diffs if not ({"S_3", "N_3", "N_3_hd"} & {x[2], x[3]})]
+    # 알려진 차이(S_3 3·4배위, N_3 2·4배위의 이웃 수 가정)는 따로 확인
+    unexpected = [x for x in diffs if not ({"S_3", "N_3", "N_3_hd", "N_3_ha"} & {x[2], x[3]})]
     for x in diffs:
         print(x)
     assert not unexpected, unexpected

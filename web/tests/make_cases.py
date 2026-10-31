@@ -26,6 +26,10 @@ SMILES = [
     "OC(=O)c1ccccc1C(=O)O",
     "Cc1ccc(cc1)S(=O)(=O)[O-].CCCC[N+]1(C)CCCC1",
     "N#C[N-]C#N.CCn1cc[n+](C)c1",
+    "O=c1ccc2ccccc2o1",
+    "Cn1cnc2c1c(=O)n(C)c(=O)n2C",
+    "NC(N)=[NH2+].CC(=O)[O-]",
+    "F[B-](F)(F)F.CCn1cc[n+](C)c1",
 ]
 
 

@@ -43,7 +43,7 @@ const body = s => s.split("\n").slice(1).join("\n").replace(/^# 전하: .*$/m, "
     await page.click("text=아세트아닐라이드");
     const lt = await page.inputValue("#lt");
     assert.ok(lt.includes('import "dreiding.lt"') && lt.includes("MOL inherits DREIDING {"));
-    assert.ok(lt.includes("@atom:N_R_b1_d2_hd") && lt.includes("@atom:C_2_b1"));
+    assert.ok(lt.includes("@atom:N_2_b1_d2_hd") && lt.includes("@atom:C_2_b1"));
     assert.ok(await page.locator(".tcard").count() >= 6);
   });
 

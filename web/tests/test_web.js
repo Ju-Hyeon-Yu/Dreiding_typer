@@ -26,7 +26,7 @@ const test = async (name, fn) => {
   const ff = new T.DreidingFF(JSON.parse(fs.readFileSync(TABLES)));
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dreiding-web-"));
 
-  await test("라벨·경고·오류가 Python 타이퍼와 같음 (SMILES 128개)", () => {
+  await test("라벨·경고·오류가 Python 타이퍼와 같음 (SMILES 142개)", () => {
     const py = JSON.parse(execFileSync("python3", [path.join(HERE, "py_labels.py"), path.join(HERE, "smiles_set.txt")]));
     const js = JSON.parse(execFileSync("node", [path.join(HERE, "js_labels.js"), path.join(HERE, "smiles_set.txt")]));
     const diff = Object.keys(py).filter(k => JSON.stringify(py[k]) !== JSON.stringify(js[k]));
