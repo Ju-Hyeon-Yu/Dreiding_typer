@@ -7,6 +7,8 @@ optionally together with a mol2 file that carries RESP charges. Atom types follo
 `force_fields/dreiding.lt` file shipped with moltemplate (Matthew Bone's version). The output has the form
 `import "dreiding.lt"` + `MOL inherits DREIDING { ... }`, so it can be pulled straight into a `system.lt`.
 
+- Labels follow the rules in the text of the moltemplate DREIDING label manual: `R` only for atoms in aromatic
+  rings, `_b1`/`_b2` only in pairs. `dreiding.lt` itself is only read, never changed.
 - Types are derived from the bond orders in the SMILES, so they do not depend on the conformer.
 - Hydrogen-bond labels (`H_HB`, `_hd`, `_ha`) are assigned automatically.
 - Bond-order flags (`_b1`/`_b2`) are chosen by reading the rules in `dreiding.lt` directly, so that the bond
@@ -200,40 +202,65 @@ Points to watch:
   is used, not its bond-order column. If the atom count, bond count or connectivity differ, the program stops.
 - A warning is printed if the sum of charges differs from the formal charge of the SMILES.
 
-## Typing rules in brief
+## Typing rules
+
+The rules follow the text of the moltemplate DREIDING label manual
+([DREIDING_Label_Manual.pdf](https://github.com/m-bone/moltemplate-DREIDING)):
+
+- `R` is used only for atoms in aromatic rings. The manual defines it as "an sp2 atom involved in the resonance
+  structure of an aromatic ring", and its amide figure uses `C_2`/`N_2`.
+- `_b1`/`_b2` are used only in pairs ("all bX flags must be used in pairs"): every flagged atom has a bonded
+  partner with the same flag.
+- `_d1`/`_d2` give the number of neighbors minus one, and `_hd`/`_ha` mark hydrogen-bond donors and acceptors.
 
 | Case | Label |
 |---|---|
-| Aromatic C/N/O | `C_R`, `N_R_d1` (2 neighbors), `N_R_d2` (3 neighbors), `O_R` |
-| Carboxylate and nitro resonance groups | Center `C_R`/`N_R`, O as `O_R` (bond order 1.5) |
-| Three-coordinate N bonded to an sp2/aromatic atom (amide, aniline) | `N_R_d2` |
-| Two-coordinate N without multiple bonds (imide anion) | `N_R_d1` |
-| O in esters, phenols and acid OH | `O_3` (dihedral rule (i) of the original paper applies) |
-| S | `S_3` (the only S type) |
+| Atoms in aromatic rings | `C_R`, `N_R_d1` (2 neighbors), `N_R_d2` (3 neighbors), `O_R` |
+| C, N, O with a multiple bond outside aromatic rings | `C_2`, `C_1`, `N_2_dN`, `N_1`, `O_2`, `O_1` |
+| N bonded to a C=O, C=C or aromatic ring (amide, aniline, urea, guanidinium) | `N_2_d2`, as in the manual's amide figure |
+| N without such a neighbor (amine, sulfonamide, TFSI anion) | `N_3` |
+| Carboxylate and nitro groups | Center `C_2`/`N_2`; `=O` → `O_2`, `–O⁻` → `O_2_b1` (bond orders as written in the SMILES) |
+| O in esters, ethers, phenols and acid OH | `O_3` (`dreiding.lt` has a separate dihedral rule for `O_3` next to an sp2 atom) |
+| Terminal O on S or P | `O_2` |
+| Aromatic ring carrying an exocyclic C=O (pyridone, uracil, coumarin) | That ring becomes a non-aromatic sp2 ring (`_2` + `_b1`/`_b2`), like the manual's cyclopentadienone; fused rings without one stay `R` |
+| B | `B_3` (4 neighbors, e.g. BF₄⁻), `B_2_dN` |
+| S | `S_3` (the only S label) |
+| P | `P_3_dN` |
 | I, Br, Cl, F | `I`, `Br`, `Cl`, `F` |
 | H bonded to N/O/F | `H_HB`, and its heavy atom gets `_hd` |
-| Hydrogen-bond acceptors | `_ha` on O, F, and N with a free lone pair |
-| sp2 atom pairs joined by a single bond | `_b1`/`_b2` assigned by search |
+| Hydrogen-bond acceptors | `_ha` on O and F always, and on N with a free lone pair. Added even when the molecule has no donor, since the system built later may contain one |
+| sp2 atom pairs joined by a single bond | `_b1`/`_b2` pairs chosen by search so that moltemplate's bond order matches the SMILES |
 
-### Relation to the examples in the label manual
+### Relation to the figures in the label manual
 
-Only labels defined in moltemplate's `dreiding.lt` are used. Some labels differ in name from the figures in the
-label manual ([DREIDING_Label_Manual.pdf](https://github.com/m-bone/moltemplate-DREIDING)), but tests confirm that
-moltemplate assigns identical bond, angle, dihedral and improper coefficients in those cases
-(cyclopentadienone, imidazole N–H).
+| Figure | Manual | This tool | moltemplate result |
+|---|---|---|---|
+| 1,3-Butadiene | `C_2`, `C_2_b1`, `C_2_b1`, `C_2` | same | same |
+| Imine | `C_2`, `N_2_d1_hd` | same | same |
+| Cyclopentadienone | `_b2` pair on C=O, `_b1` pair on a ring single bond | `_b1` pair on carbonyl C–ring C, `_b2` pair on ring C=C | identical coefficients |
+| Imidazole N–H | `N_R_b1_d2_hd` | `N_R_d2_hd` | identical (the unpaired `_b1` has no effect) |
+| Furan (moltemplate example) | `O_R` | `O_R_ha` | identical when no donor is present |
+| Amide | `C_2` + `N_2_b1_d2_hd` | `C_2_b1` + `N_2_b1_d2_hd` | differs (see below) |
 
-The one deliberate exception is amides. The manual's example (`C_2` + `N_2_b1_d2_hd`) treats C–N as a double bond
-(equilibrium 1.275 Å, rotation barrier 45 kcal/mol), while this tool (`C_2_b1` + `N_R_b1_d2_hd`) treats it as a
-single bond (1.31 Å, barrier 5 kcal/mol). The latter is closer to a real amide (about 1.33 Å, 15–20 kcal/mol).
+When several flag placements give the same moltemplate result, a label name can differ from the figure; tests
+confirm that the bond, angle, dihedral and improper coefficients are identical. In the amide figure only N carries
+`_b1`, which breaks the pairing rule, and moltemplate then treats C–N as a double bond (force constant doubled,
+rotation barrier 45 kcal/mol). This tool pairs the flag as the manual text requires, so C–N stays a single bond as
+in the SMILES.
 
-## Known limitations (reported as warnings)
+## Cases without an exact label
 
-- **Three- and four-coordinate S (sulfonate, sulfone, TFSI)** — DREIDING has no such type, so `S_3`
-  (based on H₂S, equilibrium angle 92.1°) is used. S=O gets a single-bond force constant, and the dihedral barrier
-  through S is divided assuming two neighbors, so it is three times too large.
-- **Four-coordinate N (quaternary ammonium, protonated amines)** — `N_3` assumes three neighbors, so the dihedral
-  barrier through this N is 1.5 times too large.
-- **Cl** — the Cl mass in `dreiding.lt` is 34.45 (the real value is 35.45).
+Reported as warnings, using the closest label:
+
+- **S with three or four neighbors** (sulfonate, sulfone, TFSI) → `S_3`, which assumes two neighbors.
+- **N with two or four neighbors and no sp2 neighbor** (TFSI anion, quaternary ammonium) → `N_3`, which assumes
+  three neighbors.
+- **O with three neighbors** → `O_3`.
+- **Bonds whose order no label pair can express** (S=O, C–S in thiophene, C=S) → the order of the label pair is used.
+
+The program stops with an error for halogens with more than one neighbor (ClO₄⁻, iodonium), PF₆⁻ (there is no
+`P_3_d5`), allene and CO₂. Of the other elements in the manual (Al, Ga, Ge, As, Se, In, Sn, Sb, Te), none are
+supported yet; Na, Ca, Fe and Zn only as free ions.
 
 ## Files
 
@@ -256,13 +283,15 @@ pip install -e ".[test]"         # pytest, lammps (LAMMPS tests are skipped if l
 python3 -m pytest -q tests       # about a minute, including moltemplate runs
 ```
 
-The integration tests run moltemplate on the `.lt` files of 14 molecules, including ion pairs, TFSI/BMIM,
-amides, carboxylates, nitro groups, biphenyl and conjugated chains, and check that:
+The unit tests check the manual's rules (`R` only in aromatic rings, paired `_b1`/`_b2`, bond orders) over the
+whole SMILES set in `web/tests/smiles_set.txt`. The integration tests run moltemplate on the `.lt` files of 20
+molecules, including ion pairs, TFSI/BMIM, EMIM/BF₄, amides, carboxylates, nitro groups, guanidinium, pyridone,
+coumarin, biphenyl and conjugated chains, and check that:
 
 - every bond force constant equals 350 × the expected bond order
 - every angle and dihedral receives a type (nothing is dropped)
 - dihedral coefficients match an independent implementation of rules (a)–(j) of Mayo 1990
-  (except for the limitations above)
+  (except where no exact label exists, as listed above)
 - each fragment of an ion pair has its own molecule ID, and mol2 atom order and charges are preserved
 - the label-manual examples and this tool's labels give identical moltemplate coefficients
 - LAMMPS can read the result and run a single-point calculation
