@@ -108,3 +108,34 @@
   결합 r0 는 Fe 를 빼고 전부 R_I+R_J−0.01 과 일치, 평형각도 In 외 일치.
 - 조용히 틀리는 경우: ClO4⁻ 의 Cl 중심 평형각 180°(Cl 은 1가 전용 타입).
   다이아릴아이오도늄은 이면각 규칙이 없어 오류로 멈춤(메시지 불친절).
+
+## 5단계 — 2차 검토 (2026-10-31)
+### 1차 검토 정정
+- 수소결합 D_hb 4.0 을 "Gasteiger 전하 기준 값"이라고 한 것은 근거 없음. 논문을 인용한 LUNAR 전사본은
+  Gasteiger 7.0 / 전하 없음 9.0 kcal/mol, Goddard 강의 자료도 Gasteiger 7.0, LAMMPS 문서 예시는 9.5.
+  moltemplate 생성 스크립트(Dreiding_nonbondHB.py)는 4.0 의 출처를 밝히지 않음.
+- 술폰아마이드 N → N_3 은 확실한 수정이 아니라 절충: N 각도는 좋아지지만(+9.9° → −3.1°) S–N 길이가
+  나빠짐(+0.005 → +0.057 Å, MMFF94 대비).
+- 아마이드 C_R/N_R 은 C–N(1.320 → 1.349, MMFF 1.366)·장벽(5 → 25, 실험 16~21)은 좋아지나 C=O 가
+  1.222 → 1.255 로 길어짐(MMFF 1.223). 또 양쪽에 방향족이 붙은 아마이드(벤즈아닐라이드, NHPI,
+  폴리이미드·아라미드 단위)는 b1 플래그 충돌로 라벨 조합이 없음 → 그룹별 되돌림(fallback) 필요.
+- dreid-typer 는 정답지가 아님: 술포네이트 O 타입이 SMILES 표기(어느 O 가 O⁻ 인지)에 따라 바뀜,
+  P=O 를 O_3 으로 둠, TCM⁻ 중심 C 를 C_3 으로 둠.
+### 근거 보강
+- S ε 0.344: SEAMM, LUNAR, lammps_interface, pysimm 네 전사본 모두 일치 (moltemplate 만 0.32).
+- 혼합 규칙: LUNAR(@combination geometric), Towhee 모두 기하평균. moltemplate 는 σ 산술평균.
+- improper: lammps_interface 는 평면 중심당 3개 × K/3, moltemplate 는 1개 × K=40 → 대칭 중심에서 동등.
+### 새로 찾은 것
+- cleanup_moltemplate.sh 를 쓰면 수소결합 주개 플래그가 틀어짐: 정리 후 타입 번호가 받개 < 주개가 되면
+  `pair_coeff 받개 주개 ... i` 로 남아 LAMMPS 가 받개를 주개로 봄(H 가 없으니 항이 0).
+  메탄올+아세톤 MD 에서 수소결합 에너지 −77.4 → −3.8 kcal/mol. 정리 전(원래 출력)은 정상.
+  moltemplate postprocess 는 pair_style 을 알 때만 i↔j 를 바꾸는데, 정리 경로에서 그게 안 되는 것으로 보임.
+- 할라이드 음이온(Cl⁻, Br⁻, I⁻)은 공유결합 할로젠 LJ(σ 3.5~3.7 Å)를 받음. 이온용 값(σ 4.4~5.4)보다 작음.
+- 생성 .lt 에서 보정 가능 여부: `pair_coeff` 덮어쓰기(S ε)는 정리 전·후 모두 유지,
+  `mass` 덮어쓰기(Cl)는 정리 전만 유지(정리 스크립트가 지움).
+- 84개 분자(현재·제안 규칙)를 moltemplate 로 돌려 각·이면각·improper 누락 0 확인.
+  MMFF94 대비 DREIDING 고유 오차: S–O +0.13 Å, TFSI S–N +0.10, C(=O)–C(sp3) −0.06,
+  카복실레이트 O–C–O −10°, 술포닐 각 ±6~10°.
+- RDKit MMFFOptimizeMolecule 은 분자의 방향족 표시를 바꿈 → 타이핑 전에 쓰면 안 됨
+  (CLI 는 조각 복사본에만 써서 영향 없음을 확인).
+- 제안 규칙 시제품(스크래치)으로 dreid-typer 와의 차이 89 → 52 원자(188 분자), 남은 차이는 의도적.
